@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Textured Cubes</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+            overflow: hidden;
+        }
+        canvas {
+            background-color: white;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+
+    <!-- Vector math library -->
+    <script src="vector.js"></script>
+
+    <!-- Core implementation -->
+    <script src="utils/inject-deps.js"></script>
+    <script src="models/cube.js"></script>
+    <script src="services/texture-mapper.js"></script>
+
+    <!-- Main driver code -->
+    <script>
+        class CubeScene {
+            constructor(canvas) {
+                this.canvas = canvas;
+                this.cubes = [];
+                this.lastTime = performance.now();
+                this.selectedCube = null;
+
+                this.init();
+            }
+
+            init() {
+                const texture = new Image();
+                texture.src = 'texture.png';
+                
+                texture.onload = () => {
+                    this.textureMapper = new TextureMapper(this.canvas, texture);
+                    this.setupEventListeners();
+                    this.animate();
+                };
+            }
+
+    animate() {
+        const currentTime = performance.now();
+        const deltaTime = (currentTime - this.lastTime) / 1000;
+        this.lastTime = currentTime;
+
+        const ctx = this.canvas.getContext('2d');
+        ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        ctx.fillStyle = '#f0f0f0';
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Update all cubes with collision detection
+        this.cubes.forEach(cube => {
+            cube.update(deltaTime, this.cubes);
+            cube.render(ctx);
+        });
+
+        requestAnimationFrame(() => this.animate());
+    }
+          
+    setupEventListeners() {
+        this.canvas.addEventListener('click', (event) => {
+            const rect = this.canvas.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+            
+            // Check if clicked on existing cube
+            const clickedCube = this.findClickedCube(x, y);
+            if (clickedCube) {
+                clickedCube.handleClick();
+                return;
+            }
+            
+            // Create new cube if didn't click existing one
+            this.createNewCube(x, y);
+        });
+    }
+
+    findClickedCube(x, y) {
+        // Check cubes in reverse order (top to bottom)
+        for (let i = this.cubes.length - 1; i >= 0; i--) {
+            if (this.cubes[i].isPointInside(x, y)) {
+                return this.cubes[i];
+            }
+        }
+        return null;
+    }
+
+    createNewCube(x, y) {
+        const TexturedCube = injectDeps(Cube);
+        const cube = new TexturedCube({
+            position: new Vector.Vec3(x/50 - 5, -5, y/50 - 5),
+            gridX: Math.floor(x/50),
+            gridZ: Math.floor(y/50),
+            targetY: this.findStackHeight(x, y),
+            textureMapper: this.textureMapper
+        });
+        
+        cube.velocity = new Vector.Vec3(
+            (Math.random() - 0.5) * 2,
+            0,
+            (Math.random() - 0.5) * 2
+        );
+        
+        cube.angularVelocity = new Vector.Vec3(
+            Math.random() * 0.5,
+            Math.random() * 0.5,
+            Math.random() * 0.5
+        );
+        
+        this.cubes.push(cube);
+    }
+
+            findStackHeight(x, y) {
+                const gridX = Math.floor(x/50);
+                const gridZ = Math.floor(y/50);
+                let maxHeight = 0;
+                
+                this.cubes.forEach(cube => {
+                    if (cube.gridX === gridX && cube.gridZ === gridZ) {
+                        maxHeight = Math.max(maxHeight, cube.position.y + 2);
+                    }
+                });
+                
+                return maxHeight;
+            }
+        }
+
+        // Initialize the scene when document is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            const canvas = document.getElementById('canvas');
+            new CubeScene(canvas);
+        });
+    </script>
+</body>
+</html>
